@@ -318,6 +318,85 @@
 
     #studioCanvas:active { cursor: grabbing; }
 
+    /* Locket-style floating sparkle button & shutter bar */
+    .sparkle-fab {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,0.28);
+      background: rgba(15, 16, 22, 0.72);
+      backdrop-filter: blur(8px);
+      color: #fde047;
+      font-size: 22px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+      z-index: 5;
+      transition: transform 0.15s ease;
+    }
+
+    .sparkle-fab:active { transform: scale(0.92); }
+
+    .locket-shutter-bar {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 6px 12px;
+    }
+
+    .locket-circle-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: #fff;
+      font-size: 20px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      transition: transform 0.15s ease, background 0.15s ease;
+    }
+
+    .locket-circle-btn:hover { background: #2d3148; }
+    .locket-circle-btn:active { transform: scale(0.92); }
+
+    .locket-shutter {
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      border: 4px solid #ff6b9d;
+      background: #ffffff;
+      cursor: pointer;
+      box-shadow: 0 0 0 4px rgba(255, 107, 157, 0.25), 0 10px 26px rgba(0,0,0,0.45);
+      transition: transform 0.12s ease;
+      position: relative;
+    }
+
+    .locket-shutter:active { transform: scale(0.9); }
+
+    .after-snap-bar {
+      width: 100%;
+      max-width: 560px;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: rgba(255, 107, 157, 0.12);
+      border: 1px solid rgba(255, 107, 157, 0.38);
+      border-radius: 14px;
+      padding: 10px 14px;
+    }
+
+    .after-snap-bar.show { display: flex; }
+
     .stage-toolbar {
       width: 100%;
       max-width: 560px;
@@ -538,6 +617,20 @@
     <section class="stage-wrap">
       <div class="canvas-container">
         <canvas id="studioCanvas" width="1080" height="1080"></canvas>
+        <button class="sparkle-fab" id="btnQuickFrames" title="Chọn bộ khung">✨</button>
+      </div>
+
+      <!-- Locket-style live camera shutter bar -->
+      <div class="locket-shutter-bar">
+        <label class="locket-circle-btn" for="photoInput" title="Chọn ảnh từ thư viện">🖼️</label>
+        <button class="locket-shutter" id="btnLocketShutter" title="Bật Camera / Chụp áp khung ngay"></button>
+        <button class="locket-circle-btn" id="btnQuickFlip" title="Đổi Camera trước/sau">🔄</button>
+      </div>
+
+      <!-- Quick actions right after snapping a photo -->
+      <div class="after-snap-bar" id="afterSnapBar">
+        <button class="btn btn-primary" id="btnQuickSave">💾 Lưu vào Ảnh (iPhone)</button>
+        <button class="btn" id="btnRetake">📸 Chụp lại</button>
       </div>
 
       <div class="camera-bar" id="cameraBar">
@@ -2284,15 +2377,39 @@
       showToast('Đã xóa toàn bộ nhãn dán');
     });
 
-    document.getElementById('btnDownload').addEventListener('click', () => {
+    async function saveOrShareHDImage() {
       render(true);
-      const a = document.createElement('a');
-      a.download = `locket-${state.frameId}-${Date.now()}.png`;
-      a.href = canvas.toDataURL('image/png');
-      a.click();
+      const filename = `locket-${state.frameId}-${Date.now()}.png`;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       render(false);
+
+      if (blob && navigator.canShare) {
+        const file = new File([blob], filename, { type: 'image/png' });
+        if (navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({
+              files: [file],
+              title: 'Locket Khung HD'
+            });
+            showToast('✨ Đã mở bảng chia sẻ — chọn "Lưu hình ảnh" để lưu vào Ảnh!');
+            return;
+          } catch (err) {
+            if (err && err.name === 'AbortError') return;
+          }
+        }
+      }
+
+      const url = blob ? URL.createObjectURL(blob) : canvas.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.download = filename;
+      a.href = url;
+      a.click();
+      if (blob) setTimeout(() => URL.revokeObjectURL(url), 4000);
       showToast('Đã tải ảnh hoàn chỉnh 1080×1080 HD!');
-    });
+    }
+
+    document.getElementById('btnDownload').addEventListener('click', saveOrShareHDImage);
+    document.getElementById('btnQuickSave').addEventListener('click', saveOrShareHDImage);
 
     document.getElementById('btnExportFrame').addEventListener('click', () => {
       const frame = FRAMES.find(f => f.id === state.frameId) || FRAMES[0];
@@ -2395,7 +2512,8 @@
         state.photo = img;
         stopCamera();
         render(false);
-        showToast('📸 Đã chụp xong! Bạn có thể chỉnh thêm nhãn dán rồi bấm Tải ảnh HD.');
+        document.getElementById('afterSnapBar').classList.add('show');
+        showToast('📸 Đã chụp & áp khung! Bấm "Lưu vào Ảnh" để lưu ngay.');
       };
       img.src = off.toDataURL('image/png');
     }
@@ -2498,6 +2616,32 @@
     document.getElementById('btnMirrorCam').addEventListener('click', () => {
       state.mirrorCamera = !state.mirrorCamera;
       showToast(state.mirrorCamera ? 'Đã bật lật gương' : 'Đã tắt lật gương');
+    });
+
+    // Locket-style shutter, flip & quick frames button
+    document.getElementById('btnLocketShutter').addEventListener('click', () => {
+      document.getElementById('afterSnapBar').classList.remove('show');
+      if (!state.cameraActive) {
+        startCamera();
+      } else {
+        snapPhotoFromCamera();
+      }
+    });
+
+    document.getElementById('btnRetake').addEventListener('click', () => {
+      document.getElementById('afterSnapBar').classList.remove('show');
+      startCamera();
+    });
+
+    document.getElementById('btnQuickFlip').addEventListener('click', () => {
+      state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+      state.mirrorCamera = state.facingMode === 'user';
+      if (state.cameraActive) startCamera();
+      else showToast(state.facingMode === 'user' ? 'Đã chọn Camera trước' : 'Đã chọn Camera sau');
+    });
+
+    document.getElementById('btnQuickFrames').addEventListener('click', () => {
+      document.getElementById('frameGrid').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
 
     // INIT
