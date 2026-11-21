@@ -1,0 +1,15 @@
+{
+  "name": "Locket Khung Studio",
+  "short_name": "Locket Khung",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0f1016",
+  "theme_color": "#0f1016",
+  "icons": [
+    {
+      "src": "./icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
